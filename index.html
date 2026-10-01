@@ -7,20 +7,32 @@
   <style>
     body {
       margin: 0;
-      background-color: #1a1a1a;
+      background-color: #222;
+      color: #fff;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
+      font-family: sans-serif;
     }
     #scratch-stage {
-      border: 2px solid #333;
+      width: 480px;
+      height: 360px;
+      border: 2px solid #555;
       border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      background-color: #fff; /* 読み込み前は白背景 */
+    }
+    #error-log {
+      color: #ff6b6b;
+      margin-top: 15px;
+      max-width: 480px;
+      white-space: pre-wrap;
+      font-size: 14px;
     }
   </style>
 
-  <!-- CDNからScratchの必要ライブラリを直接読み込み -->
+  <!-- unpkg CDN (安定版) -->
   <script src="https://unpkg.com/scratch-vm@0.2.0/dist/web/scratch-vm.js"></script>
   <script src="https://unpkg.com/scratch-render@0.1.0/dist/web/scratch-render.js"></script>
   <script src="https://unpkg.com/scratch-storage@1.3.4/dist/web/scratch-storage.js"></script>
@@ -29,45 +41,54 @@
 <body>
 
   <canvas id="scratch-stage" width="480" height="360"></canvas>
+  <div id="error-log"></div>
 
   <script>
+    const logError = (msg) => {
+      console.error(msg);
+      document.getElementById('error-log').innerText = msg;
+    };
+
     document.addEventListener('DOMContentLoaded', async () => {
       const canvas = document.getElementById('scratch-stage');
-      
-      // 各エンジンの初期化
-      const renderer = new window.ScratchRender(canvas);
-      const vm = new window.VirtualMachine();
-      const audioEngine = new window.AudioEngine();
-      const storage = new window.ScratchStorage();
 
-      vm.attachRenderer(renderer);
-      vm.attachAudioEngine(audioEngine);
-      vm.attachStorage(storage);
+      // 1. 各ライブラリの存在チェック
+      if (!window.ScratchRender || !window.VirtualMachine) {
+        logError('Scratchのライブラリ(CDN)の読み込みに失敗しました。');
+        return;
+      }
 
-      // 同じディレクトリにある画像・音声アセットを参照する設定
-      storage.addWebStore(
-        [storage.AssetType.ImageModule, storage.AssetType.ImageVector, storage.AssetType.Sound],
-        (asset) => `./${asset.assetId}.${asset.dataFormat}`
-      );
-
-      // キーボード入力を Scratch に渡す設定
-      document.addEventListener('keydown', (e) => {
-        vm.postIOData('keyboard', { key: e.key, isDown: true });
-      });
-      document.addEventListener('keyup', (e) => {
-        vm.postIOData('keyboard', { key: e.key, isDown: false });
-      });
-
-      // project.json を読み込んで実行
       try {
+        // 2. エンジン初期化
+        const renderer = new window.ScratchRender(canvas);
+        const vm = new window.VirtualMachine();
+        const audioEngine = new window.AudioEngine();
+        const storage = new window.ScratchStorage();
+
+        vm.attachRenderer(renderer);
+        vm.attachAudioEngine(audioEngine);
+        vm.attachStorage(storage);
+
+        // 3. アセット読み込みパス設定
+        storage.addWebStore(
+          [storage.AssetType.ImageModule, storage.AssetType.ImageVector, storage.AssetType.Sound],
+          (asset) => `./${asset.assetId}.${asset.dataFormat}`
+        );
+
+        // 4. project.json の取得
         const response = await fetch('./project.json');
+        if (!response.ok) {
+          throw new Error(`project.json の取得に失敗しました (Status: ${response.status})。ファイルが同じフォルダにあるか確認してください。`);
+        }
         const projectJson = await response.json();
 
+        // 5. ロードと実行
         await vm.loadProject(projectJson);
-        vm.start();
-        vm.greenFlag();
+        vm.start();     // 描画ループ開始
+        vm.greenFlag(); // 緑の旗を押す
+
       } catch (err) {
-        console.error('読み込みエラー:', err);
+        logError(`エラーが発生しました:\n${err.message}`);
       }
     });
   </script>
