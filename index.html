@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scratch Project</title>
+  <title>Scratch Player</title>
   <style>
     body {
       margin: 0;
@@ -21,37 +21,47 @@
       height: 360px;
       border: 2px solid #555;
       border-radius: 8px;
-      background-color: #fff; /* 読み込み前は白背景 */
+      background-color: #000;
     }
     #error-log {
       color: #ff6b6b;
       margin-top: 15px;
       max-width: 480px;
       white-space: pre-wrap;
-      font-size: 14px;
+      font-size: 13px;
     }
   </style>
+  <!-- 打開策：バンドル済みのScratch VMスタンドアロンスクリプトを読み込む -->
+  <script src="https://cdn.jsdelivr.net/npm/scratch-vm@0.2.0/dist/web/scratch-vm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/scratch-render@0.1.0/dist/web/scratch-render.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/scratch-storage@1.3.4/dist/web/scratch-storage.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/scratch-audio@0.1.0/dist/web/scratch-audio.min.js"></script>
 </head>
 <body>
 
   <canvas id="scratch-stage" width="480" height="360"></canvas>
   <div id="error-log"></div>
 
-  <script type="module">
-    import VirtualMachine from 'https://esm.sh/scratch-vm@0.2.0?bundle';
-    import ScratchRender from 'https://esm.sh/scratch-render@0.1.0?bundle';
-    import ScratchStorage from 'https://esm.sh/scratch-storage@1.3.4?bundle';
-    import AudioEngine from 'https://esm.sh/scratch-audio@0.1.0?bundle';
-
+  <script>
     const logError = (msg) => {
       console.error(msg);
       document.getElementById('error-log').innerText = msg;
     };
 
-    async function init() {
+    window.addEventListener('DOMContentLoaded', async () => {
       try {
         const canvas = document.getElementById('scratch-stage');
         
+        // グローバルオブジェクトから初期化
+        const VirtualMachine = window.VirtualMachine;
+        const ScratchRender = window.ScratchRender;
+        const ScratchStorage = window.ScratchStorage;
+        const AudioEngine = window.AudioEngine;
+
+        if (!VirtualMachine || !ScratchRender) {
+          throw new Error('ライブラリのロードに失敗しました。');
+        }
+
         const renderer = new ScratchRender(canvas);
         const vm = new VirtualMachine();
         const audioEngine = new AudioEngine();
@@ -61,17 +71,14 @@
         vm.attachAudioEngine(audioEngine);
         vm.attachStorage(storage);
 
-        // 同じフォルダ内のアセットを指す
         storage.addWebStore(
           [storage.AssetType.ImageModule, storage.AssetType.ImageVector, storage.AssetType.Sound],
           (asset) => `./${asset.assetId}.${asset.dataFormat}`
         );
 
-        // キー入力の設定
         document.addEventListener('keydown', (e) => vm.postIOData('keyboard', { key: e.key, isDown: true }));
         document.addEventListener('keyup', (e) => vm.postIOData('keyboard', { key: e.key, isDown: false }));
 
-        // project.json 取得
         const res = await fetch('./project.json');
         if (!res.ok) throw new Error(`project.json が見つかりません (Status: ${res.status})`);
         const projectJson = await res.json();
@@ -83,9 +90,7 @@
       } catch (err) {
         logError(`エラー発生: ${err.message}`);
       }
-    }
-
-    init();
+    });
   </script>
 </body>
 </html>
