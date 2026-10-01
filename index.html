@@ -31,66 +31,61 @@
       font-size: 14px;
     }
   </style>
-
-  <!-- unpkg CDN (安定版) -->
-  <script src="https://unpkg.com/scratch-vm@0.2.0/dist/web/scratch-vm.js"></script>
-  <script src="https://unpkg.com/scratch-render@0.1.0/dist/web/scratch-render.js"></script>
-  <script src="https://unpkg.com/scratch-storage@1.3.4/dist/web/scratch-storage.js"></script>
-  <script src="https://unpkg.com/scratch-audio@0.1.0/dist/web/scratch-audio.js"></script>
 </head>
 <body>
 
   <canvas id="scratch-stage" width="480" height="360"></canvas>
   <div id="error-log"></div>
 
-  <script>
+  <script type="module">
+    import VirtualMachine from 'https://esm.sh/scratch-vm@0.2.0?bundle';
+    import ScratchRender from 'https://esm.sh/scratch-render@0.1.0?bundle';
+    import ScratchStorage from 'https://esm.sh/scratch-storage@1.3.4?bundle';
+    import AudioEngine from 'https://esm.sh/scratch-audio@0.1.0?bundle';
+
     const logError = (msg) => {
       console.error(msg);
       document.getElementById('error-log').innerText = msg;
     };
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      const canvas = document.getElementById('scratch-stage');
-
-      // 1. 各ライブラリの存在チェック
-      if (!window.ScratchRender || !window.VirtualMachine) {
-        logError('Scratchのライブラリ(CDN)の読み込みに失敗しました。');
-        return;
-      }
-
+    async function init() {
       try {
-        // 2. エンジン初期化
-        const renderer = new window.ScratchRender(canvas);
-        const vm = new window.VirtualMachine();
-        const audioEngine = new window.AudioEngine();
-        const storage = new window.ScratchStorage();
+        const canvas = document.getElementById('scratch-stage');
+        
+        const renderer = new ScratchRender(canvas);
+        const vm = new VirtualMachine();
+        const audioEngine = new AudioEngine();
+        const storage = new ScratchStorage();
 
         vm.attachRenderer(renderer);
         vm.attachAudioEngine(audioEngine);
         vm.attachStorage(storage);
 
-        // 3. アセット読み込みパス設定
+        // 同じフォルダ内のアセットを指す
         storage.addWebStore(
           [storage.AssetType.ImageModule, storage.AssetType.ImageVector, storage.AssetType.Sound],
           (asset) => `./${asset.assetId}.${asset.dataFormat}`
         );
 
-        // 4. project.json の取得
-        const response = await fetch('./project.json');
-        if (!response.ok) {
-          throw new Error(`project.json の取得に失敗しました (Status: ${response.status})。ファイルが同じフォルダにあるか確認してください。`);
-        }
-        const projectJson = await response.json();
+        // キー入力の設定
+        document.addEventListener('keydown', (e) => vm.postIOData('keyboard', { key: e.key, isDown: true }));
+        document.addEventListener('keyup', (e) => vm.postIOData('keyboard', { key: e.key, isDown: false }));
 
-        // 5. ロードと実行
+        // project.json 取得
+        const res = await fetch('./project.json');
+        if (!res.ok) throw new Error(`project.json が見つかりません (Status: ${res.status})`);
+        const projectJson = await res.json();
+
         await vm.loadProject(projectJson);
-        vm.start();     // 描画ループ開始
-        vm.greenFlag(); // 緑の旗を押す
+        vm.start();
+        vm.greenFlag();
 
       } catch (err) {
-        logError(`エラーが発生しました:\n${err.message}`);
+        logError(`エラー発生: ${err.message}`);
       }
-    });
+    }
+
+    init();
   </script>
 </body>
 </html>
